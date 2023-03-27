@@ -38,6 +38,11 @@ def parse_args():
         default=1800, type=int,
         help="standby timeout in seconds (default: %(default)s)"
     )
+    parser.add_argument(
+        "-d", "--spinupdelay", dest="spinup_delay",
+        default=3, type=int,
+        help="delay in seconds before disk spinup is performed (default: %(default)s)"
+    )
 
     parser.add_argument(
         "disk", nargs="+",
@@ -107,6 +112,7 @@ def hms(s):
 
 old_stats = None
 last_access = time.time()
+last_spindown = 0
 last_standby = last_access
 disk_state = 1
 
@@ -125,14 +131,15 @@ while True:
     now = time.time()
 
     if old_stats and old_stats != stats:
-        if disk_state == 0:
-            disk_state = 1
-            last_standby = now
+        if now - last_spindown > args.spinup_delay:
+            if disk_state == 0:
+                disk_state = 1
+                last_standby = now
 
-            dprint("Waking up after %s of inactivity" % hms(now - last_access))
-            wake_up()
+                dprint("Waking up after %s of inactivity" % hms(now - last_access))
+                wake_up()
 
-        last_access = now
+            last_access = now
 
     if now - last_access > args.timeout:
         if disk_state == 1:
@@ -140,6 +147,7 @@ while True:
 
             dprint("Powering down after %s" % hms(now - last_standby))
             power_down()
+            last_spindown = time.time()
 
     old_stats = stats
     time.sleep(1)
